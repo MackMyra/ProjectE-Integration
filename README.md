@@ -1,5 +1,5 @@
 # ProjectE-Integration (PEI)
-This mod will be the bridge between [ProjectE] and all ~~my~~ your favourite mods!
+This mod will be the bridge between [ProjectE] and all ~~my~~ your favourite mods! 
 
 [![Build](https://github.com/TagnumElite/ProjectE-Integration/actions/workflows/gradle_build.yml/badge.svg?branch=1.16.x)](https://github.com/TagnumElite/ProjectE-Integration/actions/workflows/gradle_build.yml)
 [![Downloads](http://cf.way2muchnoise.eu/projecte-integration.svg)](https://www.curseforge.com/minecraft/mc-mods/projecte-integration)
