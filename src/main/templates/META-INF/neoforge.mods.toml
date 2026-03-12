@@ -1,0 +1,64 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+issueTrackerURL = "https://github.com/TagnumElite/ProjectE-Integration/issues"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+updateJSONURL = "https://raw.githubusercontent.com/TagnumElite/ProjectE-Integration/1.21.x/update.json"
+displayURL = "https://www.curseforge.com/minecraft/mc-mods/projecte-integration"
+# logoFile="examplemod.png"
+credits = "Thanks to ProjectE team for ProjectE"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+
+[[dependencies.${mod_id}]]
+modId = "projecte"
+type = "required"
+versionRange = "[PE1.0.1,)"
+
+[[dependencies.${mod_id}]]
+modId = "alchemistry"
+type = "optional"
+versionRange = "[1.21.1-2.3,)"
+
+[[dependencies.${mod_id}]]
+modId = "chipped"
+type = "optional"
+versionRange = "[3.0.4,)"
+
+[[dependencies.${mod_id}]]
+modId = "create"
+type = "optional"
+versionRange = "[0.5.1,)"
+
+[[dependencies.${mod_id}]]
+modId = "immersiveengineering"
+type = "optional"
+versionRange = "[1.21.1-12.2.0-187,)"
+
+#[[dependencies.${mod_id}]]
+#modId = "farmersdelight"
+#type = "optional"
+#versionRange = "[1.18.2-1.1.2,)"
+
+#[[dependencies.${mod_id}]]
+#modId = "pneumaticcraft"
+#type = "optional"
+#versionRange = "[1.18.2-3.3.0,)"
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "${neo_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
