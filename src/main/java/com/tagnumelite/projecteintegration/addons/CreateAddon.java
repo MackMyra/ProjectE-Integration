@@ -39,25 +39,26 @@ import com.simibubi.create.content.processing.basin.BasinRecipe;
 import com.simibubi.create.content.processing.recipe.ProcessingOutput;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import com.simibubi.create.content.processing.sequenced.SequencedAssemblyRecipe;
-import com.simibubi.create.foundation.fluid.FluidIngredient;
+import com.simibubi.create.content.processing.sequenced.SequencedRecipe;
 import com.tagnumelite.projecteintegration.PEIntegration;
 import com.tagnumelite.projecteintegration.api.recipe.ARecipeTypeMapper;
 import com.tagnumelite.projecteintegration.api.recipe.nss.NSSInput;
 import com.tagnumelite.projecteintegration.api.recipe.nss.NSSOutput;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import moze_intel.projecte.api.mapper.recipe.INSSFakeGroupManager;
 import moze_intel.projecte.api.mapper.recipe.RecipeTypeMapper;
 import moze_intel.projecte.api.nss.NSSFluid;
 import moze_intel.projecte.api.nss.NormalizedSimpleStack;
-import moze_intel.projecte.emc.IngredientMap;
 import net.minecraft.core.NonNullList;
 import net.minecraft.util.Tuple;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeType;
-import net.minecraftforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 import java.util.*;
 
-// TODO: Can you see this below, maybe not gut.
 public class CreateAddon {
     public static final String MODID = "create";
 
@@ -65,80 +66,57 @@ public class CreateAddon {
         return "Create" + name + "Mapper";
     }
 
-    private abstract static class CreateProcessingRecipeMapper<R extends ProcessingRecipe<?>> extends ARecipeTypeMapper<R> {
+    public abstract static class CreateProcessingRecipeMapper<R extends ProcessingRecipe<?>> extends ARecipeTypeMapper<R> {
         @Override
         public NSSInput getInput(R recipe) {
             NonNullList<Ingredient> ingredients = recipe.getIngredients();
-            NonNullList<FluidIngredient> fluidIngredients = recipe.getFluidIngredients();
+            NonNullList<?> fluidIngredients = recipe.getFluidIngredients();
             if (ingredients.isEmpty() && fluidIngredients.isEmpty()) {
                 PEIntegration.debugLog("Recipe ({}) contains no inputs: (Ingredients: {}; Fluids: {})", recipeID, ingredients, fluidIngredients);
                 return null;
             }
 
             // A 'Map' of NormalizedSimpleStack and List<IngredientMap>
-            List<Tuple<NormalizedSimpleStack, List<IngredientMap<NormalizedSimpleStack>>>> fakeGroupMap = new ArrayList<>();
-            IngredientMap<NormalizedSimpleStack> ingredientMap = new IngredientMap<>();
+            List<Tuple<NormalizedSimpleStack, List<Object2IntMap<NormalizedSimpleStack>>>> fakeGroupMap = new ArrayList<>();
+            Object2IntMap<NormalizedSimpleStack> ingredientMap = new Object2IntOpenHashMap<>();
 
             for (int i = 0; i < ingredients.size(); i++) {
                 Ingredient ingredient = ingredients.get(i);
-                if (recipe instanceof ItemApplicationRecipe iaRecipe && iaRecipe.shouldKeepHeldItem() && i == 1)
+                if (recipe instanceof ItemApplicationRecipe iaRecipe && iaRecipe.shouldKeepHeldItem() && i == 1) {
                     continue; // Skip ItemApplicationRecipe's held item if it is not consumed.
+                }
                 if (!convertIngredient(ingredient, ingredientMap, fakeGroupMap)) {
                     return new NSSInput(ingredientMap, fakeGroupMap, false);
                 }
             }
 
-            for (FluidIngredient fluidIngredient : fluidIngredients) {
-                final int amount = fluidIngredient.getRequiredAmount();
-                List<FluidStack> matches = fluidIngredient.getMatchingFluidStacks();
-                if (matches.isEmpty()) {
-                    //PEIntegration.LOGGER.warn("");
-                    continue;
-                }
+            for (Object fluidIngredient : fluidIngredients) {
+                try {
+                    int amount;
+                    List<FluidStack> matches;
 
-                if (matches.size() == 1) {
-                    ingredientMap.addIngredient(NSSFluid.createFluid(matches.get(0)), amount);
-                } else {
-                    Set<NormalizedSimpleStack> rawNSSMatches = new HashSet<>();
-                    List<FluidStack> stacks = new ArrayList<>();
-
-                    for (FluidStack match : matches) {
-                        //Validate it is not an empty stack in case mods do weird things in custom ingredients
-                        if (!match.isEmpty()) {
-                            rawNSSMatches.add(NSSFluid.createFluid(match));
-                            stacks.add(match);
-                        }
+                    try {
+                        amount = (int) fluidIngredient.getClass().getMethod("amount").invoke(fluidIngredient);
+                        matches = Arrays.asList((FluidStack[]) fluidIngredient.getClass().getMethod("getFluids").invoke(fluidIngredient));
+                    } catch (NoSuchMethodException e) {
+                        amount = (int) fluidIngredient.getClass().getMethod("getRequiredAmount").invoke(fluidIngredient);
+                        @SuppressWarnings("unchecked")
+                        List<FluidStack> oldMatches = (List<FluidStack>) fluidIngredient.getClass().getMethod("getMatchingFluidStacks").invoke(fluidIngredient);
+                        matches = oldMatches;
                     }
 
-                    int count = stacks.size();
-                    if (count == 1) {
-                        ingredientMap.addIngredient(NSSFluid.createFluid(stacks.get(0)), amount);
-                    } else if (count > 1) {
-                        //Handle this ingredient as the representation of all the stacks it supports
-                        Tuple<NormalizedSimpleStack, Boolean> group = fakeGroupManager.getOrCreateFakeGroup(rawNSSMatches);
-                        NormalizedSimpleStack dummy = group.getA();
-                        ingredientMap.addIngredient(dummy, Math.max(amount, 1));
-                        if (group.getB()) {
-                            //Only lookup the matching stacks for the group with conversion if we don't already have
-                            // a group created for this dummy ingredient
-                            // Note: We soft ignore cases where it fails/there are no matching group ingredients
-                            // as then our fake ingredient will never actually have an emc value assigned with it
-                            // so the recipe won't either
-                            List<IngredientMap<NormalizedSimpleStack>> groupIngredientMaps = new ArrayList<>();
-                            for (FluidStack stack : stacks) {
-                                IngredientMap<NormalizedSimpleStack> groupIngredientMap = new IngredientMap<>();
-                                groupIngredientMap.addIngredient(NSSFluid.createFluid(stack), 1);
-                                groupIngredientMaps.add(groupIngredientMap);
-                            }
-                            fakeGroupMap.add(new Tuple<>(dummy, groupIngredientMaps));
-                        }
+                    if (!convertFluidIngredient(amount, matches, ingredientMap, fakeGroupMap)) {
+                        return new NSSInput(ingredientMap, fakeGroupMap, false);
                     }
+                } catch (ReflectiveOperationException e) {
+                    PEIntegration.LOGGER.error("Failed to read Create fluid ingredient for recipe {}", recipeID, e);
+                    return new NSSInput(ingredientMap, fakeGroupMap, false);
                 }
             }
 
             return new NSSInput(ingredientMap, fakeGroupMap, true);
         }
-
+    
         @Override
         public NSSOutput getOutput(R recipe) {
             List<Object> outputs = new ArrayList<>();
@@ -146,7 +124,7 @@ public class CreateAddon {
             outputs.addAll(results);
             outputs.addAll(recipe.getFluidResults());
 
-            if (outputs.size() == 0) return NSSOutput.EMPTY;
+            if (outputs.isEmpty()) return NSSOutput.EMPTY;
             return mapOutputs(outputs.toArray());
         }
     }
@@ -253,7 +231,7 @@ public class CreateAddon {
     public static class CreateMixingMapper extends CreateProcessingRecipeMapper<MixingRecipe> {
         @Override
         public String getName() {
-            return NAME("CUTTING");
+            return NAME("Mixing");
         }
 
         @Override
@@ -341,13 +319,40 @@ public class CreateAddon {
 
         @Override
         protected List<Ingredient> getIngredients(SequencedAssemblyRecipe recipe) {
-            return Collections.singletonList(recipe.getIngredient());
+            final int loops = recipe.getLoops();
+            final List<Ingredient> ingredients = new ArrayList<>(loops * recipe.getSequence().size());
+            ingredients.add(recipe.getIngredient());
+
+            int i = 0;
+            for (SequencedRecipe<?> step : recipe.getSequence()) {
+                final ProcessingRecipe<?> stepRecipe = step.getRecipe();
+                final List<Ingredient> stepIngredients = new ArrayList<>(stepRecipe.getIngredients());
+
+                // TODO: use fluids from stepRecipe.getFluidIngredients();
+
+                // We skip the first ingredient because it is the input from the previous step
+                stepIngredients.removeFirst();
+                // We ignore steps with one ingredient because it doesn't add anything else
+                if (stepIngredients.isEmpty()) continue;
+
+                if (loops == 1) {
+                    ingredients.addAll(stepIngredients);
+                } else {
+                    for (Ingredient ingredient : stepIngredients) {
+                        ingredients.addAll(Collections.nCopies(loops, ingredient));
+                    }
+                }
+
+                i++;
+            }
+
+            return ingredients;
         }
 
         @Override
         public NSSOutput getOutput(SequencedAssemblyRecipe recipe) {
-            // TODO: Add support for mapOutput multiple items with 100% chance
-            if (recipe.getOutputChance() != 1f) return null;
+            // We include recipes with reduced output chance
+            //if (recipe.getOutputChance() < 1f) return null;
 
             ItemStack output = recipe.getResultItem(registryAccess);
             if (output.isEmpty()) return null;
